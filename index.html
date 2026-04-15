@@ -558,9 +558,11 @@
       $('totalReturn').className = 'sub ' + cls(d.total_return_pct);
       $('unrealizedPnl').textContent = (d.unrealized_pnl >= 0 ? '+' : '') + fmt(d.unrealized_pnl);
       $('unrealizedPnl').className = 'value ' + cls(d.unrealized_pnl);
-      $('winRate').textContent = d.win_rate !== null ? num(d.win_rate).toFixed(0) + '%' : '—';
-      $('maxDrawdown').textContent = d.max_drawdown_pct.toFixed(1) + '%';
-      $('maxDrawdown').className = 'value ' + (d.max_drawdown_pct > 8 ? 'negative' : d.max_drawdown_pct > 4 ? 'status-warn' : 'neutral');
+      const winRate = num(d.win_rate, null);
+      const maxDrawdown = num(d.max_drawdown_pct);
+      $('winRate').textContent = winRate !== null ? winRate.toFixed(0) + '%' : '—';
+      $('maxDrawdown').textContent = maxDrawdown.toFixed(1) + '%';
+      $('maxDrawdown').className = 'value ' + (maxDrawdown > 8 ? 'negative' : maxDrawdown > 4 ? 'status-warn' : 'neutral');
 
       renderEquityCurve(d.equity_curve);
 
@@ -781,19 +783,26 @@
         return 'status-ok';
       };
 
-      $('riskDaily').textContent = `${r.daily_loss_pct.toFixed(1)}% / 2.0%`;
-      $('riskDaily').className = 'risk-value ' + riskStatus(r.daily_loss_pct, 2);
-      $('riskWeekly').textContent = `${r.weekly_loss_pct.toFixed(1)}% / 5.0%`;
-      $('riskWeekly').className = 'risk-value ' + riskStatus(r.weekly_loss_pct, 5);
-      $('riskMonthly').textContent = `${r.monthly_loss_pct.toFixed(1)}% / 10.0%`;
-      $('riskMonthly').className = 'risk-value ' + riskStatus(r.monthly_loss_pct, 10);
-      $('riskDrawdown').textContent = `${r.max_drawdown_pct.toFixed(1)}% / 12.0%`;
-      $('riskDrawdown').className = 'risk-value ' + riskStatus(r.max_drawdown_pct, 12);
-      $('riskPositions').textContent = `${r.positions_count} / 10`;
-      $('riskLargest').textContent = `${r.largest_position_pct.toFixed(1)}% / 10.0%`;
-      $('riskLargest').className = 'risk-value ' + riskStatus(r.largest_position_pct, 10);
-      $('riskSector').textContent = `${r.largest_sector_pct.toFixed(1)}% / 25.0%`;
-      $('riskSector').className = 'risk-value ' + riskStatus(r.largest_sector_pct, 25);
+      const dailyLoss = num(r.daily_loss_pct);
+      const weeklyLoss = num(r.weekly_loss_pct);
+      const monthlyLoss = num(r.monthly_loss_pct);
+      const maxDrawdown = num(r.max_drawdown_pct);
+      const largestPosition = num(r.largest_position_pct);
+      const largestSector = num(r.largest_sector_pct);
+
+      $('riskDaily').textContent = `${dailyLoss.toFixed(1)}% / 2.0%`;
+      $('riskDaily').className = 'risk-value ' + riskStatus(dailyLoss, 2);
+      $('riskWeekly').textContent = `${weeklyLoss.toFixed(1)}% / 5.0%`;
+      $('riskWeekly').className = 'risk-value ' + riskStatus(weeklyLoss, 5);
+      $('riskMonthly').textContent = `${monthlyLoss.toFixed(1)}% / 10.0%`;
+      $('riskMonthly').className = 'risk-value ' + riskStatus(monthlyLoss, 10);
+      $('riskDrawdown').textContent = `${maxDrawdown.toFixed(1)}% / 12.0%`;
+      $('riskDrawdown').className = 'risk-value ' + riskStatus(maxDrawdown, 12);
+      $('riskPositions').textContent = `${r.positions_count ?? 0} / 10`;
+      $('riskLargest').textContent = `${largestPosition.toFixed(1)}% / 10.0%`;
+      $('riskLargest').className = 'risk-value ' + riskStatus(largestPosition, 10);
+      $('riskSector').textContent = `${largestSector.toFixed(1)}% / 25.0%`;
+      $('riskSector').className = 'risk-value ' + riskStatus(largestSector, 25);
     }
 
     loadData();
