@@ -1159,13 +1159,9 @@
         const el = $(id);
         if (!el) return;
         const period = benchmarkPeriods[periodName] || {};
-        if (benchmark.status !== 'current') {
-          el.textContent = `SPY unavailable — ${benchmark.reason || 'waiting for a matching completed close.'}`;
-          el.className = 'sb-benchmark neutral';
-          return;
-        }
         if (!period.available) {
-          el.textContent = `SPY unavailable — ${period.reason || 'no matching close.'}`;
+          const pending = periodName === 'today' && benchmark.status === 'partial';
+          el.textContent = `${pending ? 'SPY pending' : 'SPY unavailable'} — ${period.reason || 'no matching close.'}`;
           el.className = 'sb-benchmark neutral';
           return;
         }
