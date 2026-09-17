@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GORDON — Paper Portfolio Dashboard</title>
+  <title>GORDON - Schwab Brick</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     :root {
@@ -60,12 +61,12 @@
       margin-bottom: 24px;
       padding-bottom: 16px;
       border-bottom: 1px solid var(--border);
-      flex-wrap: wrap;
     }
 
     .meta-bar span { white-space: nowrap; }
     .meta-bar .regime { color: var(--gold); font-weight: 600; }
 
+    /* Cards */
     .cards {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -102,6 +103,66 @@
     .negative { color: var(--red); }
     .neutral { color: var(--text); }
 
+    /* Scoreboard: the single headline answer to "did the book grow or decline". */
+    .scoreboard {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+    }
+    .sb-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    .sb-title { font-size: 13px; letter-spacing: 1.5px; font-weight: 700; color: var(--text); }
+    .sb-sub { font-size: 11px; color: var(--text-dim); }
+    .sb-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .sb-cell {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .sb-cell.lead { border-color: rgba(68, 138, 255, 0.45); }
+    .sb-label {
+      font-size: 10px;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+    .sb-value { font-size: 26px; font-weight: 700; line-height: 1.1; }
+    .sb-pct { font-size: 13px; margin-top: 3px; font-weight: 600; }
+    .sb-from { font-size: 10px; color: var(--text-dim); margin-top: 6px; }
+    .sb-benchmark {
+      border-top: 1px solid var(--border);
+      color: var(--text-dim);
+      font-size: 10px;
+      line-height: 1.35;
+      margin-top: 10px;
+      min-height: 27px;
+      padding-top: 8px;
+    }
+    .sb-benchmark.pos { color: var(--green); }
+    .sb-benchmark.neg { color: var(--red); }
+    .sb-benchmark.neutral { color: var(--text-dim); }
+    .sb-benchmark-note { color: var(--text-dim); }
+    .sb-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+    .sb-strip strong { color: var(--text); font-weight: 600; }
+    .sb-locked { margin-left: auto; opacity: 0.72; }
+    @media (max-width: 900px) {
+      .sb-row { grid-template-columns: repeat(2, 1fr); }
+      .sb-locked { margin-left: 0; }
+    }
+
+    /* Sections */
     .section {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -118,11 +179,13 @@
       margin-bottom: 16px;
     }
 
+    /* Chart */
     .chart-container {
       position: relative;
       height: 260px;
     }
 
+    /* Tables */
     table {
       width: 100%;
       border-collapse: collapse;
@@ -146,6 +209,7 @@
     }
 
     tr:last-child td { border-bottom: none; }
+
     tr:hover td { background: var(--surface2); }
 
     .ticker {
@@ -153,6 +217,7 @@
       color: var(--blue);
     }
 
+    /* Risk gauge */
     .risk-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -169,19 +234,23 @@
     }
 
     .risk-item:last-child { border-bottom: none; }
+
     .risk-item .risk-label { color: var(--text-dim); }
+
     .risk-item .risk-value { font-weight: 600; }
 
     .status-ok { color: var(--green); }
     .status-warn { color: var(--gold); }
     .status-halt { color: var(--red); }
 
+    /* Two-column layout */
     .two-col {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 16px;
     }
 
+    /* Daily P&L bar chart */
     .pnl-bar {
       display: flex;
       align-items: center;
@@ -209,32 +278,325 @@
       font-style: italic;
     }
 
-    .error-banner {
+    /* Tomorrow's Plan — the plain-language block read first thing each morning */
+    .plan-headline {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .plan-meta {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 16px;
+    }
+
+    .plan-meta.stale { color: var(--gold); }
+
+    .plan-items {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 12px;
+    }
+
+    .plan-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--text-dim);
+      border-radius: 6px;
+      padding: 14px 16px;
+    }
+
+    .plan-item.buy, .plan-item.already_placed { border-left-color: var(--green); }
+    .plan-item.backup { border-left-color: var(--gold); }
+    .plan-item.watch { border-left-color: var(--blue); }
+
+    .plan-name {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .plan-line {
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .plan-note {
+      font-size: 13px;
+      color: var(--text-dim);
+      margin-top: 12px;
+    }
+
+    /* ── Brick cockpit additions ──────────────────────────────────────── */
+    .freshness {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .freshness-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      box-shadow: 0 0 8px transparent;
+    }
+    .freshness-dot.fresh { background: var(--green); box-shadow: 0 0 6px rgba(0,230,118,0.5); }
+    .freshness-dot.stale { background: var(--gold); box-shadow: 0 0 6px rgba(255,215,64,0.4); }
+    .freshness-dot.cold  { background: var(--red);  box-shadow: 0 0 6px rgba(255,82,82,0.4); }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 24px;
+      padding: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .toolbar-hint {
+      flex-basis: 100%;
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .tb-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 14px;
+      font-family: inherit;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .tb-btn:hover { border-color: var(--gold); color: var(--gold); }
+    .tb-btn.primary { border-color: var(--gold); color: var(--gold); }
+    .tb-btn.primary:hover { background: rgba(255,215,64,0.08); }
+    .tb-btn:disabled {
+      opacity: 0.48;
+      cursor: wait;
+      border-color: var(--border);
+      color: var(--text-dim);
+    }
+    .toolbar-status {
+      flex-basis: 100%;
+      min-height: 16px;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+    .toolbar-status.ready { color: var(--green); }
+    .toolbar-status.running { color: var(--gold); }
+    .toolbar-status.error { color: var(--red); }
+
+    .buffer-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 12px;
+      min-width: 56px;
+      text-align: center;
+    }
+    .buffer-badge.crit { background: var(--red-dim); color: var(--red); }
+    .buffer-badge.warn { background: rgba(255,215,64,0.15); color: var(--gold); }
+    .buffer-badge.ok   { background: var(--green-dim); color: var(--green); }
+    .buffer-badge.dim  { background: rgba(136,136,160,0.15); color: var(--text-dim); }
+
+    .buffer-alert-banner {
+      display: none;
       background: var(--red-dim);
       border: 1px solid var(--red);
-      border-radius: 8px;
-      padding: 12px 20px;
+      color: var(--red);
+      padding: 10px 16px;
+      border-radius: 6px;
       margin-bottom: 16px;
       font-size: 13px;
-      display: none;
+      letter-spacing: 0.3px;
     }
+    .buffer-alert-banner.active { display: block; }
 
-    .connection-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all 0.2s ease;
+      pointer-events: none;
+      max-width: 340px;
+      z-index: 1000;
+      font-family: inherit;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast code { color: var(--text); font-size: 11px; }
+    .chart-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .chart-head h2 { margin-bottom: 0; }
+    .chart-controls {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .chart-status {
+      width: 100%;
+      font-size: 12px;
+      color: var(--text-dim);
+      min-height: 16px;
+    }
+    .symbol-link {
+      color: var(--gold);
+      background: transparent;
+      border: 0;
+      padding: 0;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+    }
+    .symbol-link:hover { color: var(--green); }
+    .queue-table td { vertical-align: top; }
+    .queue-title {
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    .queue-summary {
+      color: var(--text-dim);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .queue-badge {
       display: inline-block;
-      margin-right: 6px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      white-space: nowrap;
     }
-
-    .connection-dot.live { background: var(--green); }
-    .connection-dot.stale { background: var(--gold); }
-    .connection-dot.error { background: var(--red); }
+    .queue-badge.watch { background: rgba(68,138,255,0.15); color: var(--blue); }
+    .queue-badge.buy { background: var(--green-dim); color: var(--green); }
+    .queue-badge.sell { background: var(--red-dim); color: var(--red); }
+    .queue-badge.research { background: rgba(255,215,64,0.15); color: var(--gold); }
+    .queue-badge.preview-buy { background: var(--green-dim); color: var(--green); }
+    .queue-badge.preview-sell { background: var(--red-dim); color: var(--red); }
+    .queue-badge.locked { background: var(--red-dim); color: var(--red); }
+    .priority-high { color: var(--red); font-weight: 700; }
+    .priority-medium { color: var(--gold); font-weight: 700; }
+    .priority-normal { color: var(--text-dim); }
+    .priority-locked { color: var(--red); font-weight: 700; }
+    .queue-table tbody tr { cursor: pointer; }
+    .queue-table tbody tr.active td {
+      background: var(--surface2);
+      box-shadow: inset 3px 0 0 var(--gold);
+    }
+    .action-detail {
+      display: none;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .action-detail.active { display: block; }
+    .detail-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .detail-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 5px;
+    }
+    .detail-meta {
+      color: var(--text-dim);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin: 12px 0;
+    }
+    .detail-item {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      background: rgba(255,255,255,0.02);
+      min-height: 72px;
+    }
+    .detail-item .label {
+      color: var(--text-dim);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 6px;
+    }
+    .detail-item .body {
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .candidate-strip {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .candidate-pill {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--gold);
+      border-radius: 4px;
+      padding: 6px 9px;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .candidate-pill:hover { border-color: var(--gold); }
+    .preview-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .preview-field {
+      min-width: 88px;
+      padding: 7px 9px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-dim);
+      background: var(--surface2);
+      font-size: 12px;
+    }
 
     @media (max-width: 768px) {
       .two-col { grid-template-columns: 1fr; }
       .cards { grid-template-columns: repeat(2, 1fr); }
-      .risk-grid { grid-template-columns: 1fr; }
       body { padding: 12px; }
     }
   </style>
@@ -242,107 +604,182 @@
 <body>
   <div class="header">
     <h1>GORDON</h1>
-    <span class="subtitle">PAPER PORTFOLIO • 30-DAY TRIAL</span>
+    <span class="subtitle">GORDON + SCHWAB • LIVE ACCOUNT INTELLIGENCE • PREVIEW-ONLY ORDERS</span>
   </div>
-
-  <div class="error-banner" id="errorBanner"></div>
 
   <div class="meta-bar">
-    <span><span class="connection-dot live" id="connDot"></span>Last Updated: <strong id="lastUpdated">—</strong></span>
-    <span>Day <strong id="dayNum">0</strong> of 30</span>
-    <span>Trial: <strong id="trialDates">—</strong></span>
+    <span class="freshness">
+      <span class="freshness-dot" id="freshnessDot"></span>
+      Last Updated: <strong id="lastUpdated">—</strong>
+      <span id="freshnessAge" style="color: var(--text-dim);"></span>
+    </span>
+    <span>Account Day <strong id="dayNum">0</strong></span>
+    <span>Window: <strong id="trialDates">—</strong></span>
     <span>Regime: <strong class="regime" id="regime">—</strong></span>
+    <span>Broker: <strong id="brokerStatus">—</strong></span>
   </div>
 
-  <div class="cards">
-    <div class="card">
-      <div class="label">Portfolio Value</div>
-      <div class="value neutral" id="portfolioValue">$100,000</div>
+  <!-- Brick action toolbar -->
+  <div class="toolbar">
+    <div class="toolbar-hint">COCKPIT ACTIONS — Buttons run through the local Gordon action bridge and refresh dashboard state on completion.</div>
+    <button class="tb-btn primary" id="btnRefresh">↻ Refresh</button>
+    <button class="tb-btn" id="btnPremarket">Pre-market Check</button>
+    <button class="tb-btn" id="btnNews">News Scan</button>
+    <button class="tb-btn" id="btnPrices">Prices Now</button>
+    <button class="tb-btn" id="btnIntraday">Intraday Sweep</button>
+    <button class="tb-btn" id="btnRecap">EOD Recap</button>
+    <button class="tb-btn" id="btnSchwabSync">Schwab Sync</button>
+    <div class="toolbar-status" id="toolbarStatus">Action bridge: checking...</div>
+  </div>
+
+  <!-- Buffer alert banner (shown only when any position has buf < threshold) -->
+  <div class="buffer-alert-banner" id="bufferAlertBanner"></div>
+
+  <!-- Scoreboard: grew or declined, in four numbers. Nothing else belongs here. -->
+  <div class="scoreboard">
+    <div class="sb-head">
+      <span class="sb-title">TRADING BOOK</span>
+      <span class="sb-sub">Money Gordon actually buys and sells. Unity is excluded from every number below.</span>
     </div>
-    <div class="card">
-      <div class="label">Cash Available</div>
-      <div class="value neutral" id="cashAvailable">$100,000</div>
+    <div class="sb-row">
+      <div class="sb-cell lead">
+        <div class="sb-label">Today</div>
+        <div class="sb-value neutral" id="sbToday">—</div>
+        <div class="sb-pct neutral" id="sbTodayPct">—</div>
+        <div class="sb-from" id="sbTodayFrom"></div>
+        <div class="sb-benchmark neutral" id="sbTodayBenchmark">SPY —</div>
+      </div>
+      <div class="sb-cell">
+        <div class="sb-label">This week</div>
+        <div class="sb-value neutral" id="sbWeek">—</div>
+        <div class="sb-pct neutral" id="sbWeekPct">—</div>
+        <div class="sb-from" id="sbWeekFrom"></div>
+        <div class="sb-benchmark neutral" id="sbWeekBenchmark">SPY —</div>
+      </div>
+      <div class="sb-cell">
+        <div class="sb-label">This month</div>
+        <div class="sb-value neutral" id="sbMonth">—</div>
+        <div class="sb-pct neutral" id="sbMonthPct">—</div>
+        <div class="sb-from" id="sbMonthFrom"></div>
+        <div class="sb-benchmark neutral" id="sbMonthBenchmark">SPY —</div>
+      </div>
+      <div class="sb-cell">
+        <div class="sb-label">Since start</div>
+        <div class="sb-value neutral" id="sbStart">—</div>
+        <div class="sb-pct neutral" id="sbStartPct">—</div>
+        <div class="sb-from" id="sbStartFrom"></div>
+        <div class="sb-benchmark neutral" id="sbStartBenchmark">SPY —</div>
+      </div>
     </div>
-    <div class="card">
-      <div class="label">Total P&L</div>
-      <div class="value neutral" id="totalPnl">$0.00</div>
-      <div class="sub neutral" id="totalReturn">0.00%</div>
-    </div>
-    <div class="card">
-      <div class="label">Unrealized P&L</div>
-      <div class="value neutral" id="unrealizedPnl">$0.00</div>
-    </div>
-    <div class="card">
-      <div class="label">Win Rate</div>
-      <div class="value neutral" id="winRate">—</div>
-    </div>
-    <div class="card">
-      <div class="label">Max Drawdown</div>
-      <div class="value neutral" id="maxDrawdown">0.0%</div>
+    <div class="sb-strip">
+      <span>Book value <strong id="sbBookValue">—</strong></span>
+      <span>Cash <strong id="sbCash">—</strong></span>
+      <span>At work <strong id="sbAtWork">—</strong></span>
+      <span>Positions <strong id="sbPositions">—</strong></span>
+      <span class="sb-benchmark-note" id="sbBenchmarkNote">SPY comparison loading…</span>
+      <span class="sb-locked">Unity, locked and never traded <strong id="sbLocked">—</strong> <span id="sbLockedToday"></span></span>
     </div>
   </div>
 
+  <!-- Tomorrow's Plan -->
   <div class="section">
-    <h2>Equity Curve</h2>
+    <h2>Tomorrow's Plan</h2>
+    <div class="plan-headline" id="planHeadline">—</div>
+    <div class="plan-meta" id="planMeta"></div>
+    <div class="plan-items" id="planItems"></div>
+    <div class="plan-note" id="planNote"></div>
+    <div class="empty-state" id="planEmpty">Tomorrow's plan is written after today's close.</div>
+  </div>
+
+  <!-- Main Chart -->
+  <div class="section">
+    <div class="chart-head">
+      <h2 id="mainChartTitle">Portfolio Equity — ex-Unity (U)</h2>
+      <div class="chart-controls">
+        <button class="tb-btn primary" id="btnAccountChart">Account</button>
+        <button class="tb-btn" data-range="1D">1D</button>
+        <button class="tb-btn" data-range="5D">5D</button>
+        <button class="tb-btn" data-range="1M">1M</button>
+        <button class="tb-btn" data-range="3M">3M</button>
+        <button class="tb-btn" data-range="6M">6M</button>
+        <button class="tb-btn" data-range="1Y">1Y</button>
+        <button class="tb-btn" data-range="YTD">YTD</button>
+        <div class="chart-status" id="chartStatus">Click a ticker to load Schwab price history.</div>
+      </div>
+    </div>
     <div class="chart-container">
       <canvas id="equityChart"></canvas>
     </div>
+    <div class="action-detail" id="actionDetail">
+      <div id="actionDetailContent"></div>
+    </div>
   </div>
 
+  <!-- Schwab Positions -->
   <div class="section">
-    <h2>Open Positions</h2>
+    <h2>Schwab Positions</h2>
     <div id="openPositions">
       <table>
         <thead>
           <tr>
             <th>Ticker</th>
-            <th>Company</th>
-            <th>Direction</th>
-            <th>Shares</th>
-            <th>Entry</th>
-            <th>Current</th>
+            <th>Name</th>
+            <th>Side</th>
+            <th>Qty</th>
+            <th>Avg Cost</th>
+            <th>Last</th>
+            <th>Day P&L</th>
+            <th>Day %</th>
             <th>Mkt Value</th>
-            <th>P&L</th>
-            <th>P&L %</th>
-            <th>Signal</th>
+            <th>Total P&L</th>
+            <th>Total %</th>
+            <th>Actions</th>
           </tr>
         </thead>
-        <tbody id="openPositionsBody"></tbody>
+        <tbody id="openPositionsBody">
+        </tbody>
       </table>
-      <div class="empty-state" id="openEmpty">No open positions — 100% cash</div>
+      <div class="empty-state" id="openEmpty">No Schwab positions synced</div>
     </div>
   </div>
 
+  <!-- Toast (action status confirmation) -->
+  <div class="toast" id="toast"></div>
+
+  <!-- Two columns: Daily P&L + Sector Exposure -->
   <div class="two-col">
     <div class="section">
-      <h2>Daily P&L</h2>
+      <h2>Day by Day — Trading Book</h2>
+      <div class="toolbar-hint">Each bar is one session's change in the tradeable book. Unity excluded. Running total on the right.</div>
       <div id="dailyPnl">
-        <div class="empty-state">No trading days yet</div>
+        <div class="empty-state">No Schwab history yet</div>
       </div>
     </div>
+
     <div class="section">
-      <h2>Sector Exposure</h2>
+      <h2>Asset Exposure</h2>
       <div class="chart-container" style="height: 200px;">
         <canvas id="sectorChart"></canvas>
       </div>
-      <div class="empty-state" id="sectorEmpty">No sector exposure — 100% cash</div>
+      <div class="empty-state" id="sectorEmpty">No asset exposure synced</div>
     </div>
   </div>
 
+  <!-- Risk Dashboard -->
   <div class="section">
-    <h2>Risk Dashboard</h2>
+    <h2>Account Risk</h2>
     <div class="risk-grid">
       <div>
         <div class="risk-item">
-          <span class="risk-label">Daily Loss</span>
+          <span class="risk-label">Today</span>
           <span class="risk-value status-ok" id="riskDaily">0.0% / 2.0%</span>
         </div>
         <div class="risk-item">
-          <span class="risk-label">Weekly Loss</span>
+          <span class="risk-label">From Baseline</span>
           <span class="risk-value status-ok" id="riskWeekly">0.0% / 5.0%</span>
         </div>
         <div class="risk-item">
-          <span class="risk-label">Monthly Loss</span>
+          <span class="risk-label">Cash</span>
           <span class="risk-value status-ok" id="riskMonthly">0.0% / 10.0%</span>
         </div>
         <div class="risk-item">
@@ -360,44 +797,89 @@
           <span class="risk-value status-ok" id="riskLargest">0.0% / 10.0%</span>
         </div>
         <div class="risk-item">
-          <span class="risk-label">Largest Sector</span>
+          <span class="risk-label">Largest Asset Class</span>
           <span class="risk-value status-ok" id="riskSector">0.0% / 25.0%</span>
         </div>
         <div class="risk-item">
-          <span class="risk-label">Leverage</span>
-          <span class="risk-value status-ok">1.0x</span>
+          <span class="risk-label">Trade Mode</span>
+          <span class="risk-value status-ok" id="riskTradeMode">Preview Only</span>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Schwab Order Prep -->
   <div class="section">
-    <h2>Trade History</h2>
-    <div id="closedPositions">
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Date</th>
-            <th>Ticker</th>
-            <th>Dir</th>
-            <th>Entry</th>
-            <th>Exit</th>
-            <th>P&L</th>
-            <th>Return</th>
-            <th>Days</th>
-            <th>Signal</th>
-            <th>Result</th>
-          </tr>
-        </thead>
-        <tbody id="closedPositionsBody"></tbody>
-      </table>
-      <div class="empty-state" id="closedEmpty">No completed trades yet</div>
+    <h2>Schwab Order Pipeline</h2>
+    <div class="toolbar-hint">LIVE MODE — preview to inspect payload, then type SUBMIT LIVE ORDER in the confirmation field below before clicking Submit Live. U is permanently locked.</div>
+    <div class="toolbar" style="margin-bottom:0;">
+      <input id="orderSymbol" aria-label="Symbol" placeholder="Symbol" style="background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 6px; font-family: inherit; width: 110px;">
+      <select id="orderSide" aria-label="Side" style="background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 6px; font-family: inherit;">
+        <option>BUY</option>
+        <option>SELL</option>
+      </select>
+      <select id="orderType" aria-label="Order type" style="background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 6px; font-family: inherit;">
+        <option>MARKET</option>
+        <option>LIMIT</option>
+      </select>
+      <select id="orderDuration" aria-label="Duration" style="background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 6px; font-family: inherit;">
+        <option>DAY</option>
+        <option>GOOD_TILL_CANCEL</option>
+      </select>
+      <input id="orderQty" aria-label="Quantity" placeholder="Qty" inputmode="decimal" style="background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 6px; font-family: inherit; width: 90px;">
+      <input id="orderPrice" aria-label="Estimated price" placeholder="Est price" inputmode="decimal" style="background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 6px; font-family: inherit; width: 120px;">
+      <input id="limitPrice" aria-label="Limit price" placeholder="Limit disabled" inputmode="decimal" disabled style="background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 8px 10px; border-radius: 6px; font-family: inherit; width: 125px; opacity: 0.55;">
+      <button class="tb-btn primary" id="btnOrderPreview">Preview</button>
+      <button class="tb-btn" id="btnOrderTestSubmit">Record Test</button>
+      <button class="tb-btn" id="btnOrderSubmit">Submit Live</button>
+      <div class="toolbar-status ready" id="orderPipelineStatus">Live order pipeline ready. Confirmation phrase required per order.</div>
+    </div>
+    <div class="action-detail active" style="display:block; margin-top:14px;">
+      <div class="detail-head">
+        <div>
+          <div class="detail-title">Pre-Submit Review</div>
+          <div class="detail-meta">Exact Schwab-shaped payload and reconciliation plan. Each live submission requires the exact confirmation phrase.</div>
+        </div>
+        <span class="queue-badge" style="background: rgba(220,60,60,0.18); color: #ff6b6b; border: 1px solid rgba(220,60,60,0.55);">Live</span>
+      </div>
+      <pre id="orderPayloadReview" style="white-space:pre-wrap; overflow:auto; max-height:280px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:12px; color:var(--text); font-size:12px; line-height:1.45;">Preview an order to inspect the Schwab payload.</pre>
+      <div class="preview-strip">
+        <span class="detail-meta">Live-submit confirmation:</span>
+        <input id="liveOrderConfirmation" aria-label="Live order confirmation" placeholder="Type: SUBMIT LIVE ORDER" style="background: var(--surface2); border: 1px solid rgba(220,60,60,0.55); color: var(--text); padding: 7px 9px; border-radius: 6px; font-family: inherit; min-width: 240px;">
+        <span class="preview-field">Required per order</span>
+      </div>
+      <div class="toolbar-status ready" id="reconciliationStatus">Reconciliation plan appears after preview.</div>
+    </div>
+    <div id="closedPositions" style="display:none;">
+      <table><tbody id="closedPositionsBody"></tbody></table>
+      <div class="empty-state" id="closedEmpty"></div>
     </div>
   </div>
 
+  <!-- Gordon Action Queue -->
   <div class="section">
-    <h2>Watchlist</h2>
+    <h2>Gordon Action Queue</h2>
+    <div class="toolbar-hint">READ-ONLY ACTION LAYER — <span id="actionQueueSource">source checking</span>. Live orders run through the Schwab Order Pipeline above with per-order confirmation.</div>
+    <table class="queue-table">
+      <thead>
+        <tr>
+          <th>Priority</th>
+          <th>State</th>
+          <th>Target</th>
+          <th>Why</th>
+          <th>Next Step</th>
+          <th>Guardrail</th>
+        </tr>
+      </thead>
+      <tbody id="actionQueueBody">
+      </tbody>
+    </table>
+    <div class="empty-state" id="actionQueueEmpty">No Gordon actions queued</div>
+  </div>
+
+  <!-- Watchlist -->
+  <div class="section">
+    <h2>Gordon Signals</h2>
     <div id="watchlist">
       <table>
         <thead>
@@ -405,51 +887,28 @@
             <th>Ticker</th>
             <th>Company</th>
             <th>Price</th>
-            <th>Signal</th>
+            <th>Stage</th>
             <th>Score</th>
             <th>Notes</th>
           </tr>
         </thead>
-        <tbody id="watchlistBody"></tbody>
+        <tbody id="watchlistBody">
+        </tbody>
       </table>
       <div class="empty-state" id="watchlistEmpty">Watchlist populates on Day 1</div>
     </div>
   </div>
 
-  <div class="section">
-    <h2>Pending Orders</h2>
-    <div id="pendingOrders">
-      <table>
-        <thead>
-          <tr>
-            <th>Ticker</th>
-            <th>Company</th>
-            <th>Direction</th>
-            <th>Shares</th>
-            <th>Type</th>
-            <th>Execute Date</th>
-            <th>Reason</th>
-          </tr>
-        </thead>
-        <tbody id="pendingOrdersBody"></tbody>
-      </table>
-      <div class="empty-state" id="pendingEmpty">No pending orders</div>
-    </div>
-  </div>
-
-  <div style="text-align: center; padding: 24px; font-size: 11px; color: var(--text-dim);">
-    <span id="notes"></span>
-  </div>
-
   <script>
-    // ── Supabase config ──
-    // These are safe to expose in frontend code (anon key = read-only via RLS)
-    const SUPABASE_URL = 'https://yagtcllbwpvqdllkmdbm.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlhZ3RjbGxid3B2cWRsbGttZGJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTY3NTksImV4cCI6MjA5MTc3Mjc1OX0.QDkz1QPSeIu4-A4MQ13x-xQKO2AK9b5VjxSKJS0H1fM';
-
     const $ = id => document.getElementById(id);
     const num = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
     const fmt = n => num(n).toLocaleString('en-US', {style: 'currency', currency: 'USD'});
+    const compactFmt = n => num(n).toLocaleString('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      notation: 'compact',
+      maximumFractionDigits: 2
+    });
     const pct = n => {
       const value = num(n, null);
       return value === null ? '—' : (value >= 0 ? '+' : '') + value.toFixed(2) + '%';
@@ -458,6 +917,59 @@
       const value = num(n, 0);
       return value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral';
     };
+    const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;'
+    }[ch]));
+    const labelize = value => String(value || '—').replaceAll('_', ' ').replaceAll('-', ' ');
+    const tokenClass = value => String(value || '').toLowerCase().replaceAll('_', '-').replace(/[^a-z0-9-]/g, '');
+
+    function countBusinessDaysInclusive(start, end) {
+      if (!(start instanceof Date) || !(end instanceof Date) || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+        return 0;
+      }
+      let count = 0;
+      const cursor = new Date(start);
+      while (cursor <= end) {
+        const day = cursor.getDay();
+        if (day !== 0 && day !== 6) count += 1;
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      return count;
+    }
+
+    function computeDisplayDay(trialStart, fallbackDay) {
+      if (!trialStart) return fallbackDay;
+      const start = new Date(`${trialStart}T12:00:00`);
+      if (Number.isNaN(start.getTime())) return fallbackDay;
+      const today = new Date();
+      const computed = countBusinessDaysInclusive(start, today);
+      return Math.max(num(fallbackDay, 0), Math.min(computed, 30));
+    }
+
+    function deriveWatchlist(d) {
+      if (Array.isArray(d.watchlist) && d.watchlist.length) return d.watchlist;
+      if (Array.isArray(d.candidates) && d.candidates.length) {
+        return d.candidates.map(item => ({
+          ticker: item.ticker,
+          company: item.name || '',
+          price: item.close,
+          signal: 'candidate',
+          score: item.score,
+          notes: item.note || ''
+        }));
+      }
+      return [];
+    }
+
+    function marketRegimeLabel(regime) {
+      if (!regime) return '—';
+      if (typeof regime === 'string') return regime;
+      return regime.tone || regime.label || regime.regime || '—';
+    }
 
     function normalizeData(d) {
       const risk = d.risk_status || {};
@@ -466,138 +978,345 @@
       const sectorExposure = Array.isArray(risk.sector_exposure)
         ? Object.fromEntries(risk.sector_exposure.map(item => [item.sector, num(item.pct)]))
         : (d.sector_exposure || {});
-      const dailyPnl = Array.isArray(d.daily_pnl) && d.daily_pnl.length
-        ? d.daily_pnl
-        : (Array.isArray(d.equity_curve)
-          ? d.equity_curve
-              .filter(point => point.date)
-              .map(point => ({
-                date: point.date,
-                pnl: num(point.value) - 100000
-              }))
-          : []);
+      // One canonical day-by-day series. Prefer the builder's daily_series, which
+      // carries the day change, the percent and the running total. Fall back to
+      // successive closes on the equity curve so the bars stay daily changes and
+      // never silently become a cumulative line.
+      let dailyPnl;
+      if (Array.isArray(d.daily_series) && d.daily_series.length) {
+        dailyPnl = d.daily_series.map(point => ({
+          date: point.date,
+          pnl: num(point.pnl_usd),
+          pct: num(point.pnl_pct),
+          cum: num(point.cum_usd),
+          close: num(point.close)
+        }));
+      } else if (Array.isArray(d.equity_curve) && d.equity_curve.length) {
+        const points = d.equity_curve.filter(point => point.date);
+        let running = 0;
+        dailyPnl = points.map((point, i) => {
+          const close = num(point.value);
+          const prior = i ? num(points[i - 1].value) : close;
+          const change = close - prior;
+          running += change;
+          return {
+            date: point.date,
+            pnl: change,
+            pct: prior ? (change / prior) * 100 : 0,
+            cum: running,
+            close
+          };
+        });
+      } else {
+        dailyPnl = [];
+      }
 
       return {
         ...d,
         updated_at: d.updated_at || d.last_updated || null,
         trial_start: risk.trial_start || d.trial_start || null,
         trial_end: d.trial_end || null,
+        account_window: d.account_window || null,
+        day_number: d.day_number || computeDisplayDay(risk.trial_start || d.trial_start || null, d.day_number),
         realized_pnl: num(d.realized_pnl),
         unrealized_pnl: num(d.unrealized_pnl),
-        total_return_pct: d.total_return_pct ?? (((num(d.portfolio_value) / 100000) - 1) * 100),
+        total_return_pct: d.total_return_pct ?? (((num(d.portfolio_value) / num(d.starting_capital, d.portfolio_value)) - 1) * 100),
         win_rate: d.win_rate ?? risk.win_rate ?? null,
         max_drawdown_pct: d.max_drawdown_pct ?? risk.max_drawdown_pct ?? 0,
         daily_pnl: dailyPnl,
         sector_exposure: sectorExposure,
         open_positions: openPositions,
         closed_positions: closedPositions,
+        watchlist: deriveWatchlist(d),
+        action_queue: Array.isArray(d.action_queue) ? d.action_queue : [],
+        action_queue_source: d.action_queue_source || {mode: 'unknown', note: 'Action queue source not reported.'},
+        tomorrow_plan: d.tomorrow_plan || null,
+        broker: d.broker || {},
+        market_regime_label: marketRegimeLabel(d.market_regime),
         risk_status: {
-          daily_loss_pct: num(risk.daily_loss_pct),
+          daily_loss_pct: num(risk.daily_loss_pct ?? risk.daily_pnl_pct),
           weekly_loss_pct: num(risk.weekly_loss_pct),
           monthly_loss_pct: num(risk.monthly_loss_pct),
           max_drawdown_pct: num(risk.max_drawdown_pct),
           largest_position_pct: num(risk.largest_position_pct),
-          largest_sector_pct: num(risk.largest_sector_pct),
-          positions_count: risk.positions_count ?? openPositions.length
+          largest_sector_pct: num(risk.largest_sector_pct ?? risk.chemicals_sector_pct),
+          positions_count: risk.positions_count ?? openPositions.length,
+          cash_pct: num(risk.cash_pct),
+          invested_pct: num(risk.invested_pct),
+          day_return_pct: num(risk.day_return_pct ?? d.day_return_pct),
+          total_return_pct: num(risk.total_return_pct ?? d.total_return_pct),
+          trade_mode: risk.trade_mode || 'preview_only'
         }
       };
     }
 
     let equityChart = null;
     let sectorChart = null;
+    let currentDashboardData = null;
+    let selectedSymbol = null;
+    let selectedRange = '1M';
+    let selectedActionId = null;
+    let lastOrderPreview = null;
 
-    async function loadData() {
+    const SUPABASE_URL = 'https://yagtcllbwpvqdllkmdbm.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlhZ3RjbGxid3B2cWRsbGttZGJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxOTY3NTksImV4cCI6MjA5MTc3Mjc1OX0.QDkz1QPSeIu4-A4MQ13x-xQKO2AK9b5VjxSKJS0H1fM';
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    function setRangeButtons(activeRange) {
+      document.querySelectorAll('[data-range]').forEach(btn => {
+        btn.classList.toggle('primary', btn.dataset.range === activeRange && Boolean(selectedSymbol));
+      });
+      $('btnAccountChart').classList.toggle('primary', !selectedSymbol);
+    }
+
+    function marketChartLabel(candle, rangeKey) {
+      if (!candle.timestamp) return '';
+      const dt = new Date(candle.timestamp);
+      if (Number.isNaN(dt.getTime())) return '';
+      return ['1D', '5D'].includes(rangeKey)
+        ? dt.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'})
+        : dt.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+    }
+
+    async function loadPriceHistory(symbol, rangeKey = selectedRange) {
+      selectedSymbol = String(symbol || '').trim().toUpperCase();
+      selectedRange = rangeKey;
+      setRangeButtons(selectedRange);
+      $('mainChartTitle').textContent = `${selectedSymbol} Price History`;
+      $('chartStatus').textContent = `${selectedSymbol}: loading ${selectedRange}...`;
       try {
-        const res = await fetch(
-          `${SUPABASE_URL}/rest/v1/portfolio_state?select=data&id=eq.1`,
-          {
-            headers: {
-              'apikey': SUPABASE_ANON_KEY,
-              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-            }
-          }
-        );
-        if (!res.ok) throw new Error(`Supabase returned ${res.status}`);
-        const rows = await res.json();
-        if (!rows.length || !rows[0].data) throw new Error('No data in portfolio_state');
-
-        $('errorBanner').style.display = 'none';
-        $('connDot').className = 'connection-dot live';
-        render(normalizeData(rows[0].data));
+        const params = new URLSearchParams({symbol: selectedSymbol, range: selectedRange});
+        const payload = await bridgeFetch(`/market/price-history?${params.toString()}`);
+        renderPriceHistory(payload);
       } catch (e) {
-        console.error('Failed to load from Supabase:', e);
-        $('errorBanner').textContent = 'Connection error: ' + e.message;
-        $('errorBanner').style.display = 'block';
-        $('connDot').className = 'connection-dot error';
+        $('chartStatus').textContent = `${selectedSymbol}: ${e.message}`;
+        showToast(`Price history failed: ${e.message}`, 4000);
       }
     }
 
-    function render(d) {
-      const updatedDate = d.updated_at ? new Date(d.updated_at) : null;
-      const minutesAgo = updatedDate ? (Date.now() - updatedDate.getTime()) / 60000 : null;
-      if (minutesAgo !== null && minutesAgo > 120) {
-        $('connDot').className = 'connection-dot stale';
+    function showAccountChart() {
+      selectedSymbol = null;
+      selectedActionId = null;
+      setRangeButtons(selectedRange);
+      $('mainChartTitle').textContent = 'Portfolio Equity — ex-Unity (U)';
+      $('chartStatus').textContent = 'Click a ticker to load Schwab price history.';
+      if (currentDashboardData) {
+        renderActionQueue(currentDashboardData.action_queue || []);
+        renderSelectedActionDetail();
+        syncOrderTestForm(null, null);
+        renderEquityCurve(currentDashboardData.equity_curve || []);
+      }
+    }
+
+    async function loadData() {
+      try {
+        const localData = await bridgeFetch('/data');
+        render(normalizeData(localData));
+        return;
+      } catch (bridgeError) {
+        // Supabase remains the read fallback when the local action bridge is offline.
       }
 
+      try {
+        const { data, error } = await sb.from('portfolio_state').select('data').eq('id', 1).single();
+        if (error) throw error;
+        if (data && data.data) render(normalizeData(data.data));
+      } catch (e) {
+        console.error('Failed to load dashboard data:', e);
+      }
+    }
+
+    function renderScoreboard(d) {
+      const sb = d.scoreboard || {};
+      const setPeriod = (id, period, fallbackUsd, fallbackPct) => {
+        const el = $(id);
+        if (!el) return;
+        const usd = num(period && period.usd, fallbackUsd);
+        const p = num(period && period.pct, fallbackPct);
+        el.textContent = (usd >= 0 ? '+' : '') + fmt(usd);
+        el.className = 'sb-value ' + cls(usd);
+        const pctEl = $(id + 'Pct');
+        if (pctEl) {
+          pctEl.textContent = (p >= 0 ? '+' : '') + p.toFixed(2) + '%';
+          pctEl.className = 'sb-pct ' + cls(usd);
+        }
+        const fromEl = $(id + 'From');
+        if (fromEl) {
+          fromEl.textContent = period && period.from_date
+            ? `vs ${period.from_date} close, ${fmt(num(period.from_value))}`
+            : '';
+        }
+      };
+
+      setPeriod('sbToday', sb.today, num(d.day_pnl_total), num(d.day_return_pct));
+      setPeriod('sbWeek', sb.week, 0, 0);
+      setPeriod('sbMonth', sb.month, 0, 0);
+      setPeriod('sbStart', sb.since_start, num(d.realized_pnl), num(d.total_return_pct));
+
+      const benchmark = sb.benchmark || {};
+      const benchmarkPeriods = benchmark.periods || {};
+      const setBenchmark = (id, periodName) => {
+        const el = $(id);
+        if (!el) return;
+        const period = benchmarkPeriods[periodName] || {};
+        if (benchmark.status !== 'current') {
+          el.textContent = `SPY unavailable — ${benchmark.reason || 'waiting for a matching completed close.'}`;
+          el.className = 'sb-benchmark neutral';
+          return;
+        }
+        if (!period.available) {
+          el.textContent = `SPY unavailable — ${period.reason || 'no matching close.'}`;
+          el.className = 'sb-benchmark neutral';
+          return;
+        }
+        const spyReturn = num(period.return_pct);
+        const gap = num(period.gap_pp);
+        const relationship = gap > 0.004
+          ? `ahead ${gap >= 0 ? '+' : ''}${gap.toFixed(2)} pp`
+          : gap < -0.004
+            ? `behind ${gap.toFixed(2)} pp`
+            : 'even with SPY';
+        el.textContent = `SPY ${(spyReturn >= 0 ? '+' : '') + spyReturn.toFixed(2)}% · ${relationship}`;
+        el.className = 'sb-benchmark ' + cls(gap);
+      };
+      setBenchmark('sbTodayBenchmark', 'today');
+      setBenchmark('sbWeekBenchmark', 'week');
+      setBenchmark('sbMonthBenchmark', 'month');
+      setBenchmark('sbStartBenchmark', 'since_start');
+
+      const benchmarkNote = $('sbBenchmarkNote');
+      if (benchmarkNote) {
+        if (benchmark.status === 'current') {
+          const seedNote = (benchmark.seeded_dates || []).length
+            ? '; inception endpoint sourced separately'
+            : '';
+          benchmarkNote.textContent = `SPY price return · same close-to-close dates · cached through ${benchmark.as_of_date || '—'}${seedNote}`;
+        } else {
+          benchmarkNote.textContent = `SPY comparison unavailable · ${benchmark.reason || 'waiting for matching completed-session data.'}`;
+        }
+      }
+
+      const setText = (id, value) => { const el = $(id); if (el) el.textContent = value; };
+      setText('sbBookValue', fmt(num(sb.book_value, d.portfolio_value)));
+      setText('sbCash', fmt(num(sb.cash, d.cash_available)));
+      setText('sbAtWork', fmt(num(sb.at_work, d.invested_value)));
+      setText('sbPositions', `${(d.open_positions || []).filter(p => !p.trade_locked).length}`);
+
+      const locked = sb.locked || {};
+      setText('sbLocked', fmt(num(locked.value, d.locked_value)));
+      const lockedToday = $('sbLockedToday');
+      if (lockedToday) {
+        const lu = num(locked.today_usd, d.locked_day_pnl);
+        lockedToday.textContent = `(its own day move ${(lu >= 0 ? '+' : '') + fmt(lu)}, not counted above)`;
+      }
+    }
+
+    function renderTomorrowPlan(plan) {
+      const items = plan && Array.isArray(plan.items) ? plan.items : [];
+      $('planHeadline').textContent = (plan && plan.headline) || 'No plan written yet.';
+
+      const metaParts = [];
+      if (plan && plan.for_date_label) metaParts.push(`For ${plan.for_date_label}`);
+      if (plan && plan.written_label) metaParts.push(`written ${plan.written_label}`);
+      const meta = $('planMeta');
+      meta.textContent = metaParts.join(' — ');
+      meta.className = 'plan-meta' + (plan && plan.stale ? ' stale' : '');
+
+      $('planItems').innerHTML = items.map(item => {
+        const lines = (item.lines || []).map(line => `<div class="plan-line">${esc(line)}</div>`).join('');
+        return `<div class="plan-item ${esc(item.kind || 'watch')}">
+          <div class="plan-name">${esc(item.heading || item.ticker || '')}</div>
+          ${lines}
+        </div>`;
+      }).join('');
+
+      $('planNote').textContent = (plan && plan.note) || '';
+      $('planEmpty').style.display = items.length ? 'none' : 'block';
+    }
+
+    function render(d) {
+      currentDashboardData = d;
+      // Meta
+      const updatedDate = d.updated_at ? new Date(d.updated_at) : null;
       $('lastUpdated').textContent = updatedDate && !Number.isNaN(updatedDate.getTime())
         ? updatedDate.toLocaleDateString('en-US', {
             weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
           })
         : '—';
+      if (d.updated_at) $('lastUpdated').dataset.iso = d.updated_at;
+      else delete $('lastUpdated').dataset.iso;
+      renderFreshness(d.updated_at);
       $('dayNum').textContent = d.day_number;
-      $('trialDates').textContent = d.trial_end ? `${d.trial_start} → ${d.trial_end}` : (d.trial_start || '—');
-      $('regime').textContent = d.market_regime;
+      $('trialDates').textContent = d.account_window || (d.trial_end ? `${d.trial_start} -> ${d.trial_end}` : (d.trial_start || '—'));
+      $('regime').textContent = d.market_regime_label;
+      renderBrokerStatus(d.broker, d);
 
-      const totalPnl = d.realized_pnl + d.unrealized_pnl;
-      $('portfolioValue').textContent = fmt(d.portfolio_value);
-      $('portfolioValue').className = 'value ' + cls(totalPnl);
-      $('cashAvailable').textContent = fmt(d.cash_available);
-      $('totalPnl').textContent = (totalPnl >= 0 ? '+' : '') + fmt(totalPnl);
-      $('totalPnl').className = 'value ' + cls(totalPnl);
-      $('totalReturn').textContent = pct(d.total_return_pct);
-      $('totalReturn').className = 'sub ' + cls(d.total_return_pct);
-      $('unrealizedPnl').textContent = (d.unrealized_pnl >= 0 ? '+' : '') + fmt(d.unrealized_pnl);
-      $('unrealizedPnl').className = 'value ' + cls(d.unrealized_pnl);
-      const winRate = num(d.win_rate, null);
-      const maxDrawdown = num(d.max_drawdown_pct);
-      $('winRate').textContent = winRate !== null ? winRate.toFixed(0) + '%' : '—';
-      $('maxDrawdown').textContent = maxDrawdown.toFixed(1) + '%';
-      $('maxDrawdown').className = 'value ' + (maxDrawdown > 8 ? 'negative' : maxDrawdown > 4 ? 'status-warn' : 'neutral');
+      // Scoreboard
+      renderScoreboard(d);
 
-      renderEquityCurve(d.equity_curve);
+      // Tomorrow's Plan
+      renderTomorrowPlan(d.tomorrow_plan);
 
+      // Main chart
+      if (selectedSymbol) loadPriceHistory(selectedSymbol, selectedRange);
+      else renderEquityCurve(d.equity_curve);
+
+      // Open Positions
       const openBody = $('openPositionsBody');
       openBody.innerHTML = '';
-      if (d.open_positions && d.open_positions.length > 0) {
+      if (d.open_positions.length > 0) {
         $('openEmpty').style.display = 'none';
-        d.open_positions.forEach(p => {
-          const pnl = (p.current_price - p.entry_price) * p.shares * (p.direction === 'SHORT' ? -1 : 1);
-          const pnlPct = ((p.current_price / p.entry_price) - 1) * 100 * (p.direction === 'SHORT' ? -1 : 1);
-          const mktVal = p.current_price * p.shares;
+        const sorted = [...d.open_positions].sort((a, b) =>
+          Math.abs(num(b.value ?? b.market_value)) - Math.abs(num(a.value ?? a.market_value))
+        );
+        sorted.forEach(p => {
+          const dayPnl = num(p.day_pnl);
+          const dayPct = num(p.day_pnl_pct, null);
+          const totalPnl = num(p.unrealized_pnl);
+          const totalPct = num(p.unrealized_pct, null);
+          const mktVal = num(p.value ?? p.market_value);
+          const actions = p.trade_locked
+            ? '<span class="buffer-badge crit" title="Protected: no trades allowed">Locked</span>'
+            : '<button class="tb-btn" disabled style="padding:4px 8px;font-size:11px;">Preview</button>';
           openBody.innerHTML += `<tr>
-            <td class="ticker">${p.ticker}</td>
-            <td>${p.company || ''}</td>
+            <td class="ticker"><button class="symbol-link" data-symbol="${p.ticker}">${p.ticker}</button></td>
+            <td>${p.company || p.ticker || ''}</td>
             <td>${p.direction || 'LONG'}</td>
-            <td>${p.shares}</td>
+            <td>${num(p.shares).toLocaleString('en-US')}</td>
             <td>${fmt(p.entry_price)}</td>
             <td>${fmt(p.current_price)}</td>
+            <td class="${cls(dayPnl)}">${(dayPnl >= 0 ? '+' : '') + fmt(dayPnl)}</td>
+            <td class="${cls(dayPct)}">${dayPct === null ? '—' : pct(dayPct)}</td>
             <td>${fmt(mktVal)}</td>
-            <td class="${cls(pnl)}">${(pnl >= 0 ? '+' : '') + fmt(pnl)}</td>
-            <td class="${cls(pnlPct)}">${pct(pnlPct)}</td>
-            <td>${p.signal_score || '—'}</td>
+            <td class="${cls(totalPnl)}">${(totalPnl >= 0 ? '+' : '') + fmt(totalPnl)}</td>
+            <td class="${cls(totalPct)}">${totalPct === null ? '—' : pct(totalPct)}</td>
+            <td>${actions}</td>
           </tr>`;
         });
+        renderBufferBanner([]);
       } else {
         $('openEmpty').style.display = 'block';
+        renderBufferBanner([]);
       }
 
+      // Daily P&L
       renderDailyPnl(d.daily_pnl || []);
+
+      // Sector Exposure
       renderSectorChart(d.sector_exposure || {});
+
+      // Risk Dashboard
       renderRisk(d.risk_status);
 
+      // Gordon Action Queue
+      renderActionQueueSource(d.action_queue_source || {});
+      renderActionQueue(d.action_queue || []);
+      renderSelectedActionDetail();
+
+      // Closed Positions
       const closedBody = $('closedPositionsBody');
       closedBody.innerHTML = '';
-      if (d.closed_positions && d.closed_positions.length > 0) {
+      if (d.closed_positions.length > 0) {
         $('closedEmpty').style.display = 'none';
         d.closed_positions.forEach((p, i) => {
           closedBody.innerHTML += `<tr>
@@ -618,46 +1337,254 @@
         $('closedEmpty').style.display = 'block';
       }
 
+      // Watchlist
       const watchBody = $('watchlistBody');
       watchBody.innerHTML = '';
       if (d.watchlist && d.watchlist.length > 0) {
         $('watchlistEmpty').style.display = 'none';
         d.watchlist.forEach(w => {
           watchBody.innerHTML += `<tr>
-            <td class="ticker">${w.ticker}</td>
+            <td class="ticker"><button class="symbol-link" data-symbol="${w.ticker}">${w.ticker}</button></td>
             <td>${w.company || ''}</td>
             <td>${w.price ? fmt(w.price) : '—'}</td>
-            <td>${w.signal || '—'}</td>
-            <td class="${cls(w.score || 0)}">${w.score != null ? (w.score > 0 ? '+' : '') + w.score : '—'}</td>
+            <td>${w.stage || w.signal || '—'}</td>
+            <td class="${cls(w.score || 0)}">${w.score !== undefined ? (w.score > 0 ? '+' : '') + w.score : '—'}</td>
             <td style="color: var(--text-dim); font-size: 12px;">${w.notes || ''}</td>
           </tr>`;
         });
       } else {
         $('watchlistEmpty').style.display = 'block';
       }
+    }
 
-      const pendingBody = $('pendingOrdersBody');
-      pendingBody.innerHTML = '';
-      if (d.pending_orders && d.pending_orders.length > 0) {
-        $('pendingEmpty').style.display = 'none';
-        d.pending_orders.forEach(o => {
-          pendingBody.innerHTML += `<tr>
-            <td class="ticker">${o.ticker}</td>
-            <td>${o.company || ''}</td>
-            <td>${o.direction}</td>
-            <td>${o.shares}</td>
-            <td>${o.type}</td>
-            <td>${o.execute_date}</td>
-            <td style="color: var(--text-dim); font-size: 12px;">${o.reason || ''}</td>
-          </tr>`;
-        });
+    function renderActionQueueSource(source) {
+      const el = $('actionQueueSource');
+      const mode = source.mode || 'unknown';
+      if (mode === 'gordon_authored') {
+        el.textContent = `Gordon-authored queue loaded from ${source.path || 'queue file'}`;
+        el.className = 'positive';
+      } else if (mode === 'derived_fallback') {
+        el.textContent = 'fallback derived queue: no Gordon-authored queue found';
+        el.className = 'status-warn';
       } else {
-        $('pendingEmpty').style.display = 'block';
+        el.textContent = source.note || 'queue source unknown';
+        el.className = 'neutral';
+      }
+    }
+
+    function renderActionQueue(queue) {
+      const body = $('actionQueueBody');
+      body.innerHTML = '';
+      if (!queue.length) {
+        $('actionQueueEmpty').style.display = 'block';
+        selectedActionId = null;
+        return;
+      }
+      $('actionQueueEmpty').style.display = 'none';
+      if (selectedActionId && !queue.some(item => item.id === selectedActionId)) {
+        selectedActionId = null;
+      }
+      queue.forEach(item => {
+        const stateRaw = String(item.state || '').toUpperCase();
+        const state = ['BUY', 'SELL', 'WATCH'].includes(stateRaw) ? stateRaw : 'WATCH';
+        const stateClass = state.toLowerCase();
+        const priority = tokenClass(item.priority || 'normal');
+        const target = String(item.target || '').toUpperCase();
+        const active = item.id === selectedActionId ? ' class="active"' : '';
+        body.innerHTML += `<tr${active} data-action-id="${esc(item.id)}" tabindex="0">
+          <td class="priority-${priority}">${esc(labelize(item.priority))}</td>
+          <td><span class="queue-badge ${stateClass}">${esc(state)}</span></td>
+          <td class="ticker">${esc(target || item.target || '—')}</td>
+          <td>
+            <div class="queue-title">${esc(item.title)}</div>
+            <div class="queue-summary">${esc(item.summary)}</div>
+          </td>
+          <td class="queue-summary">${esc(item.next_step)}</td>
+          <td class="queue-summary">${esc(item.guardrail || 'Preview only')}</td>
+        </tr>`;
+      });
+    }
+
+    function actionableWatchlist(d) {
+      return (d?.watchlist || [])
+        .filter(item => item && item.ticker && item.price !== null && item.price !== undefined)
+        .filter(item => String(item.ticker).toUpperCase() !== 'U');
+    }
+
+    function positionByTarget(d, target) {
+      const symbol = String(target || '').toUpperCase();
+      return (d?.open_positions || []).find(pos => String(pos.ticker || pos.symbol || '').toUpperCase() === symbol) || null;
+    }
+
+    function chartSymbolForAction(item, d) {
+      const target = String(item?.target || '').trim().toUpperCase();
+      if (!item || item.mode === 'locked') return null;
+      if (target === 'CASH FLOAT') {
+        return actionableWatchlist(d)[0]?.ticker || null;
+      }
+      return /^[A-Z][A-Z0-9.]{0,9}$/.test(target) ? target : null;
+    }
+
+    function priceForSymbol(symbol, d, item = null) {
+      const target = String(symbol || '').toUpperCase();
+      if (item && String(item.target || '').toUpperCase() === target) {
+        const direct = item.estimated_price ?? item.price;
+        if (direct !== undefined && direct !== null) return num(direct, null);
+      }
+      const position = positionByTarget(d, target);
+      if (position) return num(position.current_price, null);
+      const signal = (d?.watchlist || []).find(row => String(row.ticker || '').toUpperCase() === target);
+      if (signal) return num(signal.price, null);
+      return null;
+    }
+
+    function sideForAction(item, position) {
+      const proposed = String(item?.proposed_side || '').toUpperCase();
+      if (proposed === 'BUY' || proposed === 'SELL') return proposed;
+      if (item?.mode === 'preview_buy') return 'BUY';
+      if (item?.mode === 'preview_sell') return 'SELL';
+      return position && !position.trade_locked ? 'SELL' : 'BUY';
+    }
+
+    function actionTimestamp(d) {
+      const source = d?.updated_at || d?.last_updated;
+      const dt = source ? new Date(source) : null;
+      return dt && !Number.isNaN(dt.getTime())
+        ? dt.toLocaleString('en-US', {weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})
+        : 'current payload';
+    }
+
+    function renderSelectedActionDetail() {
+      const detail = $('actionDetail');
+      const content = $('actionDetailContent');
+      const d = currentDashboardData;
+      const item = selectedActionId && d ? (d.action_queue || []).find(row => row.id === selectedActionId) : null;
+      if (!item) {
+        detail.classList.remove('active');
+        content.innerHTML = '';
+        return;
       }
 
-      if (d.notes) {
-        $('notes').textContent = d.notes;
+      const stateRaw = String(item.state || '').toUpperCase();
+      const state = ['BUY', 'SELL', 'WATCH'].includes(stateRaw) ? stateRaw : 'WATCH';
+      const stateClass = state.toLowerCase();
+      const target = String(item.target || '').toUpperCase();
+      const position = positionByTarget(d, target);
+      const candidates = target === 'CASH FLOAT' ? actionableWatchlist(d).slice(0, 5) : [];
+      const chartSymbol = chartSymbolForAction(item, d);
+      const executable = ['preview_buy', 'preview_sell'].includes(item.mode);
+      const positionBody = position
+        ? `${esc(position.direction || 'LONG')} ${num(position.shares).toLocaleString('en-US')} sh | ${fmt(position.current_price)} last | ${pct(position.unrealized_pct)} total | ${pct(position.day_pnl_pct)} today`
+        : (item.company ? `${esc(item.company)} | not currently held in Schwab.` : 'Not currently held in Schwab.');
+      const previewSide = executable ? sideForAction(item, position) : 'None';
+      const orderType = String(item.order_type || item.orderType || 'MARKET').toUpperCase();
+      const duration = String(item.duration || 'DAY').toUpperCase();
+      const chartBody = item.mode === 'locked'
+        ? 'No chart focus from the action queue for locked positions.'
+        : (chartSymbol ? `${chartSymbol} loaded in the main chart.` : 'No chart target available yet.');
+      const thesisBody = [item.thesis, item.catalyst, item.sizing_note].filter(Boolean).join(' | ');
+      const candidateHtml = candidates.length
+        ? `<div class="candidate-strip">
+            <span class="detail-meta">Cash candidates:</span>
+            ${candidates.map(c => `<button class="candidate-pill" data-symbol="${esc(c.ticker)}">${esc(c.ticker)} ${c.price ? esc(fmt(c.price)) : ''}</button>`).join('')}
+          </div>`
+        : '';
+
+      detail.classList.add('active');
+      content.innerHTML = `<div class="detail-head">
+        <div>
+          <div class="detail-title">${esc(item.title)}</div>
+          <div class="detail-meta">Rationale timestamp: ${esc(actionTimestamp(d))} | Target: ${esc(item.target || '—')}</div>
+        </div>
+        <span class="queue-badge ${stateClass}">${esc(state)}</span>
+      </div>
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="label">Why</div>
+          <div class="body">${esc(item.summary)}</div>
+        </div>
+        <div class="detail-item">
+          <div class="label">Position Context</div>
+          <div class="body">${positionBody}</div>
+        </div>
+        <div class="detail-item">
+          <div class="label">Next Step</div>
+          <div class="body">${esc(item.next_step)}</div>
+        </div>
+        <div class="detail-item">
+          <div class="label">Chart Focus</div>
+          <div class="body">${esc(chartBody)}</div>
+        </div>
+        <div class="detail-item">
+          <div class="label">Guardrail</div>
+          <div class="body">${esc(item.guardrail || 'Gordon-managed on thesis; U permanently locked.')}</div>
+        </div>
+        <div class="detail-item">
+          <div class="label">Thesis / Catalyst</div>
+          <div class="body">${esc(thesisBody || 'No additional thesis metadata attached.')}</div>
+        </div>
+      </div>
+      ${candidateHtml}
+      <div class="preview-strip">
+        <span class="detail-meta">Order test pipeline:</span>
+        <span class="preview-field">Symbol: ${esc(executable ? (chartSymbol || target || '—') : 'N/A')}</span>
+        <span class="preview-field">Side: ${esc(previewSide)}</span>
+        <span class="preview-field">Type: ${esc(executable ? orderType : 'N/A')}</span>
+        <span class="preview-field">Duration: ${esc(executable ? duration : 'N/A')}</span>
+        <span class="preview-field">Qty: ${esc(item.order_quantity || 'manual')}</span>
+        <span class="preview-field">Record: local only</span>
+      </div>`;
+    }
+
+    function syncOrderTestForm(item, chartSymbol) {
+      const symbol = $('orderSymbol');
+      const side = $('orderSide');
+      const orderType = $('orderType');
+      const duration = $('orderDuration');
+      const qty = $('orderQty');
+      const price = $('orderPrice');
+      const limit = $('limitPrice');
+      if (!item || item.mode === 'locked' || !['preview_buy', 'preview_sell'].includes(item.mode)) {
+        symbol.value = '';
+        side.value = 'BUY';
+        orderType.value = 'MARKET';
+        duration.value = 'DAY';
+        qty.value = '';
+        qty.placeholder = 'Qty';
+        price.value = '';
+        price.placeholder = 'Est price';
+        limit.value = '';
+        syncOrderTypeFields();
+        return;
       }
+      const cleanSymbol = chartSymbol || String(item.target || '').toUpperCase();
+      const position = positionByTarget(currentDashboardData, cleanSymbol);
+      const resolvedPrice = priceForSymbol(cleanSymbol, currentDashboardData, item);
+      const itemOrderType = String(item.order_type || item.orderType || 'MARKET').toUpperCase();
+      symbol.value = cleanSymbol;
+      side.value = sideForAction(item, position);
+      orderType.value = itemOrderType === 'LIMIT' ? 'LIMIT' : 'MARKET';
+      duration.value = String(item.duration || 'DAY').toUpperCase() === 'GOOD_TILL_CANCEL' ? 'GOOD_TILL_CANCEL' : 'DAY';
+      qty.value = item.order_quantity || '';
+      qty.placeholder = 'Qty';
+      price.value = resolvedPrice ? String(resolvedPrice) : '';
+      price.placeholder = resolvedPrice ? 'Est price' : 'Est price';
+      limit.value = item.limit_price || item.limitPrice || '';
+      syncOrderTypeFields();
+    }
+
+    function focusAction(actionId, updateChart = true) {
+      if (!currentDashboardData) return;
+      const item = (currentDashboardData.action_queue || []).find(row => row.id === actionId);
+      if (!item) return;
+      selectedActionId = item.id;
+      renderActionQueue(currentDashboardData.action_queue || []);
+      renderSelectedActionDetail();
+      const chartSymbol = chartSymbolForAction(item, currentDashboardData);
+      syncOrderTestForm(item, chartSymbol);
+      if (updateChart && chartSymbol) loadPriceHistory(chartSymbol, selectedRange);
+      if (item.mode === 'locked') showToast(`${item.target}: hard trading lock active.`, 2200);
+      $('actionDetail').scrollIntoView({behavior: 'smooth', block: 'nearest'});
     }
 
     function renderEquityCurve(curve) {
@@ -706,7 +1633,71 @@
               ticks: {
                 color: '#8888a0',
                 font: { size: 10 },
-                callback: v => '$' + (v / 1000).toFixed(0) + 'k'
+                callback: v => compactFmt(v)
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderPriceHistory(payload) {
+      const ctx = $('equityChart').getContext('2d');
+      if (equityChart) equityChart.destroy();
+
+      const candles = Array.isArray(payload.candles) ? payload.candles.filter(c => c.close !== null && c.close !== undefined) : [];
+      if (!candles.length) {
+        $('chartStatus').textContent = `${payload.symbol || selectedSymbol}: no price history returned for ${payload.range || selectedRange}`;
+        if (currentDashboardData) renderEquityCurve(currentDashboardData.equity_curve || []);
+        return;
+      }
+
+      const labels = candles.map(c => marketChartLabel(c, payload.range || selectedRange));
+      const values = candles.map(c => num(c.close));
+      const startVal = values[0];
+      const lastVal = values[values.length - 1];
+      const changePct = ((lastVal / startVal) - 1) * 100;
+      const lineColor = lastVal >= startVal ? '#00e676' : '#ff5252';
+      $('mainChartTitle').textContent = `${payload.symbol} Price History`;
+      $('chartStatus').textContent = `${payload.range}: ${fmt(lastVal)} ${pct(changePct)} | ${candles.length} bars`;
+
+      equityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            data: values,
+            borderColor: lineColor,
+            backgroundColor: lineColor + '15',
+            fill: true,
+            tension: 0.25,
+            pointRadius: values.length > 40 ? 0 : 2,
+            pointHoverRadius: 5,
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => fmt(ctx.parsed.y) + ' (' + pct(((ctx.parsed.y / startVal) - 1) * 100) + ')'
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: '#1a1a26' },
+              ticks: { color: '#8888a0', font: { size: 10 }, maxTicksLimit: 10 }
+            },
+            y: {
+              grid: { color: '#1a1a26' },
+              ticks: {
+                color: '#8888a0',
+                font: { size: 10 },
+                callback: v => fmt(v)
               }
             }
           }
@@ -717,17 +1708,28 @@
     function renderDailyPnl(daily) {
       const container = $('dailyPnl');
       if (!daily.length) {
-        container.innerHTML = '<div class="empty-state">No trading days yet</div>';
+        container.innerHTML = '<div class="empty-state">No Schwab history yet</div>';
         return;
       }
-      const maxAbs = Math.max(...daily.map(d => Math.abs(d.pnl)), 1);
-      container.innerHTML = daily.slice(-20).map(d => {
-        const w = Math.max(2, (Math.abs(d.pnl) / maxAbs) * 200);
-        const c = d.pnl >= 0 ? 'pos' : 'neg';
+      const recent = daily.slice(-20);
+      const maxAbs = Math.max(...recent.map(d => Math.abs(num(d.pnl))), 1);
+      container.innerHTML = recent.map(d => {
+        const pnl = num(d.pnl);
+        const w = Math.max(2, (Math.abs(pnl) / maxAbs) * 150);
+        const c = pnl >= 0 ? 'pos' : 'neg';
+        const label = d.date && /^\d{4}-/.test(d.date) ? d.date.slice(5) : (d.date || 'sync');
+        const pctText = d.pct === undefined || d.pct === null
+          ? ''
+          : `<span class="${cls(pnl)}" style="width:62px; text-align:right;">${(num(d.pct) >= 0 ? '+' : '') + num(d.pct).toFixed(2)}%</span>`;
+        const cumText = d.cum === undefined || d.cum === null
+          ? ''
+          : `<span class="${cls(num(d.cum))}" style="width:90px; text-align:right; opacity:0.7;">${(num(d.cum) >= 0 ? '+' : '') + fmt(num(d.cum))}</span>`;
         return `<div class="pnl-bar">
-          <span class="date">${d.date.slice(5)}</span>
+          <span class="date">${label}</span>
           <div class="bar ${c}" style="width:${w}px"></div>
-          <span class="${cls(d.pnl)}">${(d.pnl >= 0 ? '+' : '') + fmt(d.pnl)}</span>
+          <span class="${cls(pnl)}" style="width:82px; text-align:right;">${(pnl >= 0 ? '+' : '') + fmt(pnl)}</span>
+          ${pctText}
+          ${cumText}
         </div>`;
       }).join('');
     }
@@ -775,38 +1777,412 @@
     }
 
     function renderRisk(r) {
-      if (!r) return;
-      const riskStatus = (val, max) => {
+      const exposureStatus = (val, max) => {
         const ratio = val / max;
         if (ratio >= 0.8) return 'status-halt';
         if (ratio >= 0.5) return 'status-warn';
         return 'status-ok';
       };
+      const moveStatus = value => value < -2 ? 'status-halt' : value < -1 ? 'status-warn' : 'status-ok';
 
-      const dailyLoss = num(r.daily_loss_pct);
-      const weeklyLoss = num(r.weekly_loss_pct);
-      const monthlyLoss = num(r.monthly_loss_pct);
+      const dayReturn = num(r.day_return_pct);
+      const totalReturn = num(r.total_return_pct ?? r.monthly_loss_pct);
+      const cashPct = num(r.cash_pct);
       const maxDrawdown = num(r.max_drawdown_pct);
       const largestPosition = num(r.largest_position_pct);
-      const largestSector = num(r.largest_sector_pct);
+      const largestAsset = num(r.largest_sector_pct);
 
-      $('riskDaily').textContent = `${dailyLoss.toFixed(1)}% / 2.0%`;
-      $('riskDaily').className = 'risk-value ' + riskStatus(dailyLoss, 2);
-      $('riskWeekly').textContent = `${weeklyLoss.toFixed(1)}% / 5.0%`;
-      $('riskWeekly').className = 'risk-value ' + riskStatus(weeklyLoss, 5);
-      $('riskMonthly').textContent = `${monthlyLoss.toFixed(1)}% / 10.0%`;
-      $('riskMonthly').className = 'risk-value ' + riskStatus(monthlyLoss, 10);
-      $('riskDrawdown').textContent = `${maxDrawdown.toFixed(1)}% / 12.0%`;
-      $('riskDrawdown').className = 'risk-value ' + riskStatus(maxDrawdown, 12);
-      $('riskPositions').textContent = `${r.positions_count ?? 0} / 10`;
-      $('riskLargest').textContent = `${largestPosition.toFixed(1)}% / 10.0%`;
-      $('riskLargest').className = 'risk-value ' + riskStatus(largestPosition, 10);
-      $('riskSector').textContent = `${largestSector.toFixed(1)}% / 25.0%`;
-      $('riskSector').className = 'risk-value ' + riskStatus(largestSector, 25);
+      $('riskDaily').textContent = pct(dayReturn);
+      $('riskDaily').className = 'risk-value ' + moveStatus(dayReturn);
+
+      $('riskWeekly').textContent = pct(totalReturn);
+      $('riskWeekly').className = 'risk-value ' + cls(totalReturn).replace('positive', 'status-ok').replace('negative', 'status-warn').replace('neutral', 'status-ok');
+
+      $('riskMonthly').textContent = `${cashPct.toFixed(1)}%`;
+      $('riskMonthly').className = 'risk-value status-ok';
+
+      $('riskDrawdown').textContent = `${maxDrawdown.toFixed(1)}%`;
+      $('riskDrawdown').className = 'risk-value ' + exposureStatus(maxDrawdown, 12);
+
+      $('riskPositions').textContent = `${r.positions_count ?? 0}`;
+      $('riskLargest').textContent = `${largestPosition.toFixed(1)}%`;
+      $('riskLargest').className = 'risk-value ' + exposureStatus(largestPosition, 50);
+      $('riskSector').textContent = `${largestAsset.toFixed(1)}%`;
+      $('riskSector').className = 'risk-value ' + exposureStatus(largestAsset, 100);
+      $('riskTradeMode').textContent = (r.trade_mode || 'preview_only').replaceAll('_', ' ');
+      $('riskTradeMode').className = 'risk-value status-ok';
     }
 
+    // ── Brick cockpit: freshness, buffer banner, toolbar ──────────────
+    function renderFreshness(updatedAtIso) {
+      const dot = $('freshnessDot');
+      const age = $('freshnessAge');
+      if (!updatedAtIso) {
+        dot.className = 'freshness-dot';
+        age.textContent = '';
+        return;
+      }
+      const updated = new Date(updatedAtIso);
+      const mins = (Date.now() - updated.getTime()) / 60000;
+      let cls = 'fresh', label;
+      if (mins < 1)        label = 'just now';
+      else if (mins < 60)  label = `${Math.floor(mins)}m ago`;
+      else if (mins < 1440) label = `${Math.floor(mins/60)}h ago`;
+      else                  label = `${Math.floor(mins/1440)}d ago`;
+      if (mins > 120)      cls = 'cold';
+      else if (mins > 30)  cls = 'stale';
+      dot.className = 'freshness-dot ' + cls;
+      age.textContent = `(${label})`;
+    }
+
+    function renderBufferBanner(breaches) {
+      const el = $('bufferAlertBanner');
+      if (!breaches || breaches.length === 0) {
+        el.classList.remove('active');
+        el.innerHTML = '';
+        return;
+      }
+      const parts = breaches.map(b => `${b.ticker} (${b.buf.toFixed(2)}%)`);
+      el.innerHTML = `⚠ STOP BUFFER ALERT — ${breaches.length} position${breaches.length>1?'s':''} below 6%: ${parts.join(' · ')}`;
+      el.classList.add('active');
+    }
+
+    function showToast(msg, lingerMs = 2400) {
+      const t = $('toast');
+      t.innerHTML = msg;
+      t.classList.add('show');
+      clearTimeout(showToast._h);
+      showToast._h = setTimeout(() => t.classList.remove('show'), lingerMs);
+    }
+
+    function renderBrokerStatus(broker = {}, dashboard = {}) {
+      const el = $('brokerStatus');
+      if (!broker.connected) {
+        el.textContent = 'not synced';
+        el.className = 'neutral';
+        return;
+      }
+      const count = Array.isArray(dashboard.open_positions)
+        ? dashboard.open_positions.length
+        : (broker.positions_count ?? 0);
+      const updated = broker.updated_at ? new Date(broker.updated_at) : null;
+      const age = updated && !Number.isNaN(updated.getTime())
+        ? updated.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit', second: '2-digit'})
+        : 'synced';
+      el.textContent = `Schwab synced | ${count} tradeable position${count === 1 ? '' : 's'} | ${age}`;
+      el.className = 'positive';
+    }
+
+    const BRIDGE_URL = 'http://127.0.0.1:17865';
+    const RUN_DONE = ['succeeded', 'failed', 'timed_out'];
+    const COCKPIT_ACTIONS = {
+      premarket: { button: 'btnPremarket', label: 'Pre-market Check' },
+      news:      { button: 'btnNews',      label: 'News Scan' },
+      prices:    { button: 'btnPrices',    label: 'Prices Now' },
+      intraday:    { button: 'btnIntraday',    label: 'Intraday Sweep' },
+      recap:       { button: 'btnRecap',       label: 'EOD Recap' },
+      schwab_sync: { button: 'btnSchwabSync',  label: 'Schwab Sync' },
+    };
+    let bridgeReady = false;
+    let activeRunId = null;
+
+    function setToolbarStatus(message, tone = '') {
+      const status = $('toolbarStatus');
+      status.textContent = message;
+      status.className = `toolbar-status ${tone}`.trim();
+    }
+
+    function updateActionButtons() {
+      const disabled = !bridgeReady || Boolean(activeRunId);
+      Object.values(COCKPIT_ACTIONS).forEach(action => {
+        $(action.button).disabled = disabled;
+      });
+    }
+
+    async function bridgeFetch(path, options = {}) {
+      const response = await fetch(BRIDGE_URL + path, {
+        mode: 'cors',
+        cache: 'no-store',
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(options.headers || {}),
+        },
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const err = new Error(body.error || `${response.status} ${response.statusText}`);
+        err.payload = body;
+        err.status = response.status;
+        throw err;
+      }
+      return body;
+    }
+
+    async function checkBridge() {
+      if (activeRunId) return;
+      try {
+        await bridgeFetch('/health');
+        bridgeReady = true;
+        setToolbarStatus('Action bridge: ready', 'ready');
+      } catch (e) {
+        bridgeReady = false;
+        setToolbarStatus('Action bridge: offline - run ~/Gordon/scripts/brick_action_server.py or load com.gordon.brick-actions', 'error');
+      }
+      updateActionButtons();
+    }
+
+    function describeRunStatus(run, label) {
+      if (run.status === 'queued') return `${label}: queued`;
+      if (run.status === 'running') return `${label}: running...`;
+      if (run.status === 'timed_out') return `${label}: timed out`;
+      if (run.status === 'failed') return `${label}: failed${run.exit_code === null ? '' : ` (exit ${run.exit_code})`}`;
+      return `${label}: complete`;
+    }
+
+    async function pollRun(runId, label) {
+      try {
+        const run = await bridgeFetch(`/runs/${runId}`);
+        setToolbarStatus(describeRunStatus(run, label), run.status === 'running' ? 'running' : '');
+        if (!RUN_DONE.includes(run.status)) {
+          setTimeout(() => pollRun(runId, label), 1500);
+          return;
+        }
+
+        activeRunId = null;
+        updateActionButtons();
+        if (run.status === 'succeeded') {
+          setToolbarStatus(`${label}: complete`, 'ready');
+          showToast(`${label} complete. Refreshing dashboard...`, 1800);
+          await loadData();
+        } else {
+          setToolbarStatus(describeRunStatus(run, label), 'error');
+          showToast(`${describeRunStatus(run, label)}. Logs: data/brick-action-runs`, 5000);
+        }
+      } catch (e) {
+        activeRunId = null;
+        bridgeReady = false;
+        updateActionButtons();
+        setToolbarStatus(`Action bridge error: ${e.message}`, 'error');
+        showToast(`Action bridge error: ${e.message}`, 5000);
+      }
+    }
+
+    async function runCockpitAction(actionName) {
+      const action = COCKPIT_ACTIONS[actionName];
+      if (!action || activeRunId) return;
+      if (!bridgeReady) await checkBridge();
+      if (!bridgeReady) {
+        showToast('Action bridge is offline.', 3000);
+        return;
+      }
+
+      activeRunId = 'starting';
+      updateActionButtons();
+      setToolbarStatus(`${action.label}: starting...`, 'running');
+      try {
+        const run = await bridgeFetch(`/actions/${actionName}`, {
+          method: 'POST',
+          body: JSON.stringify({}),
+        });
+        activeRunId = run.run_id;
+        showToast(`${action.label} started.`, 1400);
+        pollRun(run.run_id, action.label);
+      } catch (e) {
+        activeRunId = null;
+        updateActionButtons();
+        setToolbarStatus(`${action.label}: ${e.message}`, 'error');
+        showToast(`${action.label} could not start: ${e.message}`, 5000);
+      }
+    }
+
+    function shortDate(value) {
+      const dt = value ? new Date(value) : null;
+      return dt && !Number.isNaN(dt.getTime())
+        ? dt.toLocaleString('en-US', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'})
+        : '—';
+    }
+
+    function orderReviewPayload(order, extra = {}) {
+      return {
+        order_id: order.id,
+        mode: order.mode,
+        status: order.status,
+        real_order_submission_enabled: Boolean(order.real_order_submission_enabled),
+        sent_to_schwab: Boolean(order.sent_to_schwab),
+        source: order.source,
+        schwab_order_payload: order.schwab_order_payload || null,
+        reconciliation_plan: extra.reconciliation_plan || order.reconciliation_plan || null,
+        warnings: order.warnings || [],
+      };
+    }
+
+    function renderOrderReview(order, extra = {}) {
+      if (!order || !order.symbol) return;
+      lastOrderPreview = order;
+      $('orderPayloadReview').textContent = JSON.stringify(orderReviewPayload(order, extra), null, 2);
+      const rec = extra.reconciliation_plan || order.reconciliation_plan;
+      if (rec) {
+        const delta = rec.expected_position_delta || {};
+        $('reconciliationStatus').textContent = `Reconciliation ready: ${delta.symbol || order.symbol} qty delta ${delta.quantity_delta ?? '—'} after future Schwab sync.`;
+      } else {
+        $('reconciliationStatus').textContent = 'Payload reviewed. Reconciliation will run only after a future live submit and Schwab sync.';
+      }
+    }
+
+    function syncOrderTypeFields() {
+      const orderType = $('orderType').value;
+      const estimate = $('orderPrice');
+      const limit = $('limitPrice');
+      const isLimit = orderType === 'LIMIT';
+      limit.disabled = !isLimit;
+      limit.style.opacity = isLimit ? '1' : '0.55';
+      limit.placeholder = isLimit ? 'Limit price' : 'Limit disabled';
+      if (isLimit && !limit.value && estimate.value) limit.value = estimate.value;
+      if (!isLimit) limit.value = '';
+    }
+
+    function orderFormPayload() {
+      return {
+        symbol: $('orderSymbol').value.trim().toUpperCase(),
+        side: $('orderSide').value,
+        order_type: $('orderType').value,
+        duration: $('orderDuration').value,
+        quantity: $('orderQty').value,
+        estimated_price: $('orderPrice').value,
+        limit_price: $('limitPrice').value,
+        price: $('orderPrice').value,
+        source: selectedActionId || 'manual-dashboard-test',
+      };
+    }
+
+    function setOrderStatus(message, tone = 'ready') {
+      const el = $('orderPipelineStatus');
+      el.textContent = message;
+      el.className = `toolbar-status ${tone}`.trim();
+    }
+
+    async function runOrderPipeline(path, label) {
+      if (!bridgeReady) await checkBridge();
+      if (!bridgeReady) {
+        setOrderStatus('Action bridge offline. Cannot test order pipeline.', 'error');
+        return;
+      }
+      setOrderStatus(`${label}: running...`, 'running');
+      try {
+        const payload = await bridgeFetch(path, {
+          method: 'POST',
+          body: JSON.stringify(orderFormPayload()),
+        });
+        const order = payload.order || {};
+        const notional = order.estimated_notional !== null && order.estimated_notional !== undefined
+          ? ` | ${fmt(order.estimated_notional)}`
+          : '';
+        const limit = order.order_type === 'LIMIT' && order.limit_price ? ` @ limit ${fmt(order.limit_price)}` : '';
+        const duration = order.duration ? ` | ${order.duration}` : '';
+        const warnings = order.warnings && order.warnings.length ? ` | ${order.warnings.join('; ')}` : '';
+        renderOrderReview(order, payload);
+        setOrderStatus(`${label}: ${order.order_type || 'ORDER'} ${order.side} ${order.quantity} ${order.symbol}${limit}${notional}${duration} | local test only${warnings}`, 'ready');
+        showToast(`${label} complete. Nothing sent to Schwab.`, 2200);
+      } catch (e) {
+        setOrderStatus(`${label}: ${e.message}`, 'error');
+        showToast(`${label} failed: ${e.message}`, 4200);
+      }
+    }
+
+    async function runLockedLiveSubmit() {
+      if (!bridgeReady) await checkBridge();
+      if (!bridgeReady) {
+        setOrderStatus('Action bridge offline. Cannot test locked submit path.', 'error');
+        return;
+      }
+      setOrderStatus('Live submit check: running guarded path...', 'running');
+      try {
+        const payload = await bridgeFetch('/orders/submit', {
+          method: 'POST',
+          body: JSON.stringify({
+            ...orderFormPayload(),
+            confirmation: $('liveOrderConfirmation').value,
+          }),
+        });
+        const order = payload.order || {};
+        const submission = payload.submission || order.schwab_submission || {};
+        renderOrderReview(order, payload);
+        $('reconciliationStatus').textContent = submission.order_id
+          ? `Live submit accepted by Schwab. Order ID ${submission.order_id}; run Schwab sync next.`
+          : 'Live submit accepted by Schwab. Run Schwab sync next for reconciliation.';
+        setOrderStatus(`Live submit sent: ${order.order_type || 'ORDER'} ${order.side} ${order.quantity} ${order.symbol}`, 'ready');
+        showToast('Live order submitted to Schwab.', 2600);
+      } catch (e) {
+        const payload = e.payload || {};
+        if (payload.order) renderOrderReview(payload.order, payload);
+        $('reconciliationStatus').textContent = payload.reconciliation_plan
+          ? 'Locked submit checked: reconciliation plan captured, no Schwab order sent.'
+          : 'Locked submit checked: no Schwab order sent.';
+        setOrderStatus(`Live submit blocked: ${e.message}`, 'error');
+        showToast('Live submit is locked. No Schwab order sent.', 2600);
+      }
+    }
+
+    $('btnRefresh').addEventListener('click', async () => {
+      await loadData();
+      showToast('Refreshing dashboard...', 1200);
+    });
+    $('btnPremarket').addEventListener('click', () => runCockpitAction('premarket'));
+    $('btnNews').addEventListener('click',      () => runCockpitAction('news'));
+    $('btnPrices').addEventListener('click',    () => runCockpitAction('prices'));
+    $('btnIntraday').addEventListener('click',    () => runCockpitAction('intraday'));
+    $('btnRecap').addEventListener('click',       () => runCockpitAction('recap'));
+    $('btnSchwabSync').addEventListener('click',  () => runCockpitAction('schwab_sync'));
+    $('btnOrderPreview').addEventListener('click', () => runOrderPipeline('/orders/preview', 'Order preview'));
+    $('btnOrderTestSubmit').addEventListener('click', () => runOrderPipeline('/orders/test-submit', 'Record test order'));
+    $('btnOrderSubmit').addEventListener('click', runLockedLiveSubmit);
+    $('orderType').addEventListener('change', syncOrderTypeFields);
+    $('orderPrice').addEventListener('input', () => {
+      if ($('orderType').value === 'LIMIT') $('limitPrice').value = $('orderPrice').value;
+    });
+    $('limitPrice').addEventListener('input', () => {
+      if ($('orderType').value === 'LIMIT') $('orderPrice').value = $('limitPrice').value;
+    });
+    syncOrderTypeFields();
+    $('btnAccountChart').addEventListener('click', showAccountChart);
+    document.querySelectorAll('[data-range]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (selectedSymbol) loadPriceHistory(selectedSymbol, btn.dataset.range);
+        else {
+          selectedRange = btn.dataset.range;
+          setRangeButtons(selectedRange);
+          showToast('Click a ticker first to use stock ranges.', 1800);
+        }
+      });
+    });
+    document.addEventListener('click', event => {
+      const row = event.target.closest('[data-action-id]');
+      if (row) {
+        focusAction(row.dataset.actionId, true);
+        return;
+      }
+      const button = event.target.closest('[data-symbol]');
+      if (!button) return;
+      loadPriceHistory(button.dataset.symbol, selectedRange);
+    });
+    document.addEventListener('keydown', event => {
+      const row = event.target.closest('[data-action-id]');
+      if (!row || !['Enter', ' '].includes(event.key)) return;
+      event.preventDefault();
+      focusAction(row.dataset.actionId, true);
+    });
+
+    // Auto-refresh every 60 seconds
+    checkBridge();
+    setInterval(checkBridge, 30000);
     loadData();
     setInterval(loadData, 60000);
+    // Re-render freshness label every 30s using the stashed ISO
+    setInterval(() => {
+      const iso = $('lastUpdated').dataset.iso;
+      if (iso) renderFreshness(iso);
+    }, 30000);
   </script>
 </body>
 </html>
