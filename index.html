@@ -1187,6 +1187,8 @@
             ? '; inception endpoint sourced separately'
             : '';
           benchmarkNote.textContent = `SPY price return · same close-to-close dates · cached through ${benchmark.as_of_date || '—'}${seedNote}`;
+        } else if (benchmark.status === 'partial') {
+          benchmarkNote.textContent = `SPY price return · comparisons through ${benchmark.comparison_as_of_date || 'the last completed session'} · today's comparison pending until close`;
         } else {
           benchmarkNote.textContent = `SPY comparison unavailable · ${benchmark.reason || 'waiting for matching completed-session data.'}`;
         }
