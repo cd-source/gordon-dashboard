@@ -140,6 +140,7 @@
       margin-top: 10px;
       min-height: 27px;
       padding-top: 8px;
+      white-space: pre-line;
     }
     .sb-benchmark.pos { color: var(--green); }
     .sb-benchmark.neg { color: var(--red); }
@@ -639,7 +640,7 @@
   <div class="scoreboard">
     <div class="sb-head">
       <span class="sb-title">TRADING BOOK</span>
-      <span class="sb-sub">Money Gordon actually buys and sells. Unity is excluded from every number below.</span>
+      <span class="sb-sub">Managed trading book. Unity is excluded; active Gordon results begin Jul 8, 2026.</span>
     </div>
     <div class="sb-row">
       <div class="sb-cell lead">
@@ -664,11 +665,11 @@
         <div class="sb-benchmark neutral" id="sbMonthBenchmark">SPY —</div>
       </div>
       <div class="sb-cell">
-        <div class="sb-label">Since start</div>
-        <div class="sb-value neutral" id="sbStart">—</div>
-        <div class="sb-pct neutral" id="sbStartPct">—</div>
-        <div class="sb-from" id="sbStartFrom"></div>
-        <div class="sb-benchmark neutral" id="sbStartBenchmark">SPY —</div>
+        <div class="sb-label">Since live</div>
+        <div class="sb-value neutral" id="sbLive">—</div>
+        <div class="sb-pct neutral" id="sbLivePct">—</div>
+        <div class="sb-from" id="sbLiveFrom"></div>
+        <div class="sb-benchmark neutral" id="sbLiveBenchmark">SPY —</div>
       </div>
     </div>
     <div class="sb-strip">
@@ -1151,10 +1152,15 @@
       setPeriod('sbToday', sb.today, num(d.day_pnl_total), num(d.day_return_pct));
       setPeriod('sbWeek', sb.week, 0, 0);
       setPeriod('sbMonth', sb.month, 0, 0);
-      setPeriod('sbStart', sb.since_start, num(d.realized_pnl), num(d.total_return_pct));
+      setPeriod('sbLive', sb.since_live, num(d.realized_pnl), num(d.total_return_pct));
 
       const benchmark = sb.benchmark || {};
       const benchmarkPeriods = benchmark.periods || {};
+      const relationshipText = gap => gap > 0.004
+        ? `ahead +${gap.toFixed(2)} pp`
+        : gap < -0.004
+          ? `behind ${gap.toFixed(2)} pp`
+          : 'even with SPY';
       const setBenchmark = (id, periodName) => {
         const el = $(id);
         if (!el) return;
@@ -1166,19 +1172,22 @@
           return;
         }
         const spyReturn = num(period.return_pct);
-        const gap = num(period.gap_pp);
-        const relationship = gap > 0.004
-          ? `ahead ${gap >= 0 ? '+' : ''}${gap.toFixed(2)} pp`
-          : gap < -0.004
-            ? `behind ${gap.toFixed(2)} pp`
-            : 'even with SPY';
-        el.textContent = `SPY ${(spyReturn >= 0 ? '+' : '') + spyReturn.toFixed(2)}% · ${relationship}`;
-        el.className = 'sb-benchmark ' + cls(gap);
+        const grossGap = num(period.gap_pp);
+        const netGap = Object.prototype.hasOwnProperty.call(period, 'net_gap_pp')
+          ? num(period.net_gap_pp)
+          : grossGap;
+        const operatingCost = num(period.operating_cost_usd);
+        const beforeCost = `SPY ${(spyReturn >= 0 ? '+' : '') + spyReturn.toFixed(2)}% · before costs ${relationshipText(grossGap)}`;
+        const afterCost = Object.prototype.hasOwnProperty.call(period, 'net_gap_pp')
+          ? `Net after ${fmt(operatingCost)} operating cost: ${relationshipText(netGap)}`
+          : 'Net operating-cost comparison loading…';
+        el.textContent = `${beforeCost}\n${afterCost}`;
+        el.className = 'sb-benchmark ' + cls(netGap);
       };
       setBenchmark('sbTodayBenchmark', 'today');
       setBenchmark('sbWeekBenchmark', 'week');
       setBenchmark('sbMonthBenchmark', 'month');
-      setBenchmark('sbStartBenchmark', 'since_start');
+      setBenchmark('sbLiveBenchmark', 'since_live');
 
       const benchmarkNote = $('sbBenchmarkNote');
       if (benchmarkNote) {
@@ -1186,9 +1195,15 @@
           const seedNote = (benchmark.seeded_dates || []).length
             ? '; inception endpoint sourced separately'
             : '';
-          benchmarkNote.textContent = `SPY price return · same close-to-close dates · cached through ${benchmark.as_of_date || '—'}${seedNote}`;
+          const cost = sb.operating_cost || {};
+          const monthlyCost = num(cost.monthly_usd);
+          const accruedCost = num(cost.accrued_usd);
+          benchmarkNote.textContent = `SPY price return · same close-to-close dates · ${fmt(monthlyCost)}/mo operating hurdle, ${fmt(accruedCost)} accrued since ${cost.start_date || 'live start'} · cached through ${benchmark.as_of_date || '—'}${seedNote}`;
         } else if (benchmark.status === 'partial') {
-          benchmarkNote.textContent = `SPY price return · comparisons through ${benchmark.comparison_as_of_date || 'the last completed session'} · today's comparison pending until close`;
+          const cost = sb.operating_cost || {};
+          const monthlyCost = num(cost.monthly_usd);
+          const accruedCost = num(cost.accrued_usd);
+          benchmarkNote.textContent = `SPY price return · ${fmt(monthlyCost)}/mo operating hurdle, ${fmt(accruedCost)} accrued since ${cost.start_date || 'live start'} · comparisons through ${benchmark.comparison_as_of_date || 'the last completed session'} · today's comparison pending until close`;
         } else {
           benchmarkNote.textContent = `SPY comparison unavailable · ${benchmark.reason || 'waiting for matching completed-session data.'}`;
         }
@@ -1196,8 +1211,8 @@
 
       const setText = (id, value) => { const el = $(id); if (el) el.textContent = value; };
       setText('sbBookValue', fmt(num(sb.book_value, d.portfolio_value)));
-      setText('sbCash', fmt(num(sb.cash, d.cash_available)));
-      setText('sbAtWork', fmt(num(sb.at_work, d.invested_value)));
+      setText('sbCash', `${fmt(num(sb.cash, d.cash_available))} (${num(sb.cash_pct).toFixed(1)}%)`);
+      setText('sbAtWork', `${fmt(num(sb.at_work, d.invested_value))} (${num(sb.at_work_pct).toFixed(1)}%)`);
       setText('sbPositions', `${(d.open_positions || []).filter(p => !p.trade_locked).length}`);
 
       const locked = sb.locked || {};
